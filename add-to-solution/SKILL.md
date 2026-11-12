@@ -15,7 +15,7 @@ $ARGUMENTS
 ## Steps
 
 1. Determine the paths to add: the ones in the user input; if empty, ask which files or folders.
-2. Run from the repo root (the folder containing the `.slnx`):
+2. Run from the repo root (the folder containing the `.slnx`; without git, from that folder or pass `-Solution <path>`):
 
    ```powershell
    powershell -NoProfile -File "$HOME/.claude/skills/add-to-solution/add-to-slnx.ps1" <path> [<path> ...]
@@ -23,7 +23,7 @@ $ARGUMENTS
 
    (`pwsh` works too if installed)
 3. The script:
-   - expands directories to every file not ignored by git,
+   - expands directories to every file not ignored by git; git is optional: outside a git repo (or without git installed) it uses the current directory as the root and lists files recursively, skipping `.git`, `.vs`, `bin`, `obj` and `node_modules`,
    - mirrors the directory structure as `<Folder Name="/dir/sub/">` entries in the `.slnx` (root-level files go to `/Solution Items/`),
    - creates missing folders, skips files already listed, never removes anything.
 4. Report the "added ..." lines. Run `dotnet build <solution>.slnx` to confirm the XML is valid, and tell the user to reload the solution in Visual Studio.

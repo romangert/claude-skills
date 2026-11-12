@@ -8,7 +8,17 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$root = (git rev-parse --show-toplevel) -replace '/', '\'
+$root = $null
+if (Get-Command git -ErrorAction SilentlyContinue) {
+    $ErrorActionPreference = 'Continue'   # git's stderr must not abort outside a repo
+    $top = git rev-parse --show-toplevel 2>$null
+    $ErrorActionPreference = 'Stop'
+    if ($LASTEXITCODE -eq 0 -and $top) { $root = $top -replace '/', '\' }
+}
+$useGit = [bool]$root
+if (-not $root) { $root = (Get-Location).Path }
+# Directories skipped when expanding folders without git.
+$skipDirs = '.git', '.vs', 'bin', 'obj', 'node_modules'
 if (-not $Solution) {
     $found = @(Get-ChildItem -Path $root -Filter *.slnx -File)
     if ($found.Count -ne 1) { throw "Expected exactly one .slnx in $root, found $($found.Count). Use -Solution." }
@@ -20,7 +30,23 @@ $slnDir = Split-Path $Solution -Parent
 $files = foreach ($p in $Path) {
     $full = if ([IO.Path]::IsPathRooted($p)) { $p } else { Join-Path (Get-Location) $p }
     if (Test-Path $full -PathType Container) {
-        git -C $full ls-files --cached --others --exclude-standard | ForEach-Object { Join-Path $full $_ }
+        $ok = $false
+        if ($useGit) {
+            $ErrorActionPreference = 'Continue'
+            $listed = @(git -C $full ls-files --cached --others --exclude-standard 2>$null)
+            $ok = $LASTEXITCODE -eq 0
+            $ErrorActionPreference = 'Stop'
+        }
+        if ($ok) {
+            $listed | ForEach-Object { Join-Path $full $_ }
+        } else {
+            # Not a git repo (or folder outside it): walk the tree, skipping build/cache dirs.
+            $base = (Resolve-Path $full).Path.TrimEnd('\') + '\'
+            Get-ChildItem -Path $full -Recurse -File -Force | Where-Object {
+                $parts = $_.FullName.Substring($base.Length).Split('\')
+                $parts.Count -eq 1 -or -not ($parts[0..($parts.Count - 2)] | Where-Object { $skipDirs -contains $_ })
+            } | ForEach-Object FullName
+        }
     } elseif (Test-Path $full -PathType Leaf) {
         $full
     } else {
